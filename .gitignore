@@ -1,0 +1,29 @@
+# Build artifacts
+bin/
+obj/
+
+# User-specific files
+*.user
+*.swp
+*.suo
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/
+
+# Rider
+.idea/
+
+# Test output
+TestResults/
+
+# Local HTTP test files
+*.http
+
+# Configs with secrets
+appsettings.Development.json
+appsettings.*.local.json
+
+# Entity Framework migrations snapshot (optional)
+Migrations/
