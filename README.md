@@ -57,6 +57,8 @@ Defined in `appsettings.json` (replace `PLACEHOLDER` values):
 ```
 You can override via environment variables (ASP.NET Core standard mapping) or `appsettings.Development.json` for local dev.
 
+Note: The `appsettings.Development.json` in this project contains a 32-character development JWT key to satisfy HS256 minimum key length. Do NOT commit production secrets; use environment variables or a secrets manager for real deployments.
+
 ### Recommended Secure Key Generation
 ```powershell
 # Windows PowerShell

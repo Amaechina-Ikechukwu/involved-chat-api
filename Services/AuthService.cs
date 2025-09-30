@@ -10,10 +10,16 @@ using MongoDB.Driver;
 
 namespace Involved_Chat.Services
 {
-    public class AuthService(MongoDbContext context, IConfiguration config)
+    public class AuthService
     {
-        private readonly MongoDbContext _context = context;
-        private readonly IConfiguration _config = config;
+        private readonly MongoDbContext _context;
+        private readonly IConfiguration _config;
+
+        public AuthService(MongoDbContext context, IConfiguration config)
+        {
+            _context = context;
+            _config = config;
+        }
 
         private static string HashPassword(string password)
         {
