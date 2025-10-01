@@ -1,11 +1,19 @@
 using System.Text;
+using HealthChecks.UI.Client;
 using Involved_Chat.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
+using MongoDB.Driver; // IMongoClient registration
+using HealthChecks.MongoDb;
+using Involved_Chat.Models;
+using Involved_Chat.Services; // MongoDB health check extension
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 var jwtKey = builder.Configuration["Jwt:Key"];
+
 // Ensure the configured JWT key meets the minimum size for HS256 (128 bits / 16 bytes)
 if (string.IsNullOrEmpty(jwtKey))
 {
@@ -37,14 +45,58 @@ var mongoConn = builder.Configuration["MongoDbSettings:ConnectionString"];
 builder.Services.AddRouting(options => options.LowercaseUrls = true);
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+// Configure OpenAPI/NSwag and add a JWT Bearer security scheme so the Swagger UI shows an Authorize input
+builder.Services.AddOpenApiDocument(options =>
+{
+    // Optional: set basic document info
+    options.PostProcess = document =>
+    {
+        document.Info.Title = "Involved Chat API";
+    };
+
+    options.AddSecurity("JWT", new NSwag.OpenApiSecurityScheme
+    {
+        Type = NSwag.OpenApiSecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Name = "Authorization",
+        In = NSwag.OpenApiSecurityApiKeyLocation.Header,
+        Description = "Enter 'Bearer {token}' or just paste the JWT token."
+    });
+
+    // Require the scheme globally for all operations (optional)
+    options.OperationProcessors.Add(new NSwag.Generation.Processors.Security.AspNetCoreOperationSecurityScopeProcessor("JWT"));
+});
 // Register application services
 builder.Services.AddScoped<Involved_Chat.Services.AuthService>();
+builder.Services.AddScoped<Involved_Chat.Services.MessageService>();
 // Authorization should be added before building the app so middleware is available
 builder.Services.AddAuthorization();
 builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection("MongoDbSettings")); //getting mongo settings
-builder.Services.AddSingleton<MongoDbContext>(); //Rgister context
+// Register the MongoDB client as a singleton so it can be injected where needed
+builder.Services.AddSingleton<IMongoClient>(sp =>
+{
+    var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<MongoDbSettings>>().Value;
+    return new MongoClient(settings.ConnectionString);
+});
+builder.Services.AddSingleton<MongoDbContext>(); //Register context
+
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => HealthCheckResult.Healthy())
+    .AddMongoDb(
+        name: "mongodb",
+        timeout: TimeSpan.FromSeconds(5),
+        tags: new[] { "ready" }
+    );
+// HealthChecks with UI
+builder.Services
+    .AddHealthChecksUI(options =>
+    {
+        options.SetEvaluationTimeInSeconds(10); // refresh interval
+        options.AddHealthCheckEndpoint("default", "/health/ready"); // endpoint to check
+    });
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -84,12 +136,33 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
-    app.UseSwaggerUi(options =>
+    // Serve the OpenAPI document at /openapi/v1.json (default is /swagger/v1/swagger.json; customizing for consistency)
+    app.UseOpenApi(settings =>
     {
-        options.DocumentPath = "/openapi/v1.json";
+        settings.Path = "/openapi/v1.json";
+    });
+
+    // Serve Swagger UI (NSwag UI) and point it to the above document
+    app.UseSwaggerUi(settings =>
+    {
+        settings.DocumentPath = "/openapi/v1.json"; // Must match UseOpenApi path
+        // The Authorize button appears because of the security scheme defined in AddOpenApiDocument
     });
 }
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
+app.MapHealthChecksUI(options =>
+{
+    options.UIPath = "/health-ui";   // where to access the UI
+    options.ApiPath = "/health-ui-api"; // backend API for the UI
+});
 
 app.UseHttpsRedirection();
 app.UseAuthentication();

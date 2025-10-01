@@ -8,9 +8,8 @@ namespace Involved_Chat.Data
     {
         private readonly IMongoDatabase _database;
 
-        public MongoDbContext(IOptions<MongoDbSettings> options)
+        public MongoDbContext(IOptions<MongoDbSettings> options, IMongoClient client)
         {
-            var client = new MongoClient(options.Value.ConnectionString);
             _database = client.GetDatabase(options.Value.DatabaseName);
         }
 
