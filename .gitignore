@@ -11,7 +11,7 @@ obj/
 
 # VS Code
 .vscode/
-
+.env
 # Rider
 .idea/
 

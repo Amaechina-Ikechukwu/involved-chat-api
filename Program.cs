@@ -9,17 +9,26 @@ using MongoDB.Driver; // IMongoClient registration
 using HealthChecks.MongoDb;
 using Involved_Chat.Models;
 using Involved_Chat.Services; // MongoDB health check extension
+using Google.Cloud.SecretManager.V1;
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-var jwtKey = builder.Configuration["Jwt:Key"];
 
-// Ensure the configured JWT key meets the minimum size for HS256 (128 bits / 16 bytes)
-if (string.IsNullOrEmpty(jwtKey))
+// Add services to the container.
+string GetSecret(string secretId)
 {
-    throw new InvalidOperationException("Missing configuration value 'Jwt:Key'. Please set a secure key in configuration or via environment variable.");
+    var client = SecretManagerServiceClient.Create();
+    var secretName = new SecretVersionName("tangle2", secretId, "latest");
+    AccessSecretVersionResponse result = client.AccessSecretVersion(secretName);
+    return result.Payload.Data.ToStringUtf8();
 }
 
+var jwtKey = GetSecret("jwt_key");
+
+// Ensure the configured JWT key meets the minimum size for HS256
+if (string.IsNullOrEmpty(jwtKey))
+{
+    throw new InvalidOperationException("Missing configuration value 'Jwt:Key'. Secret not found in Google Secret Manager.");
+}
 byte[] jwtKeyBytes;
 try
 {
@@ -40,7 +49,7 @@ if (jwtKeyBytes.Length * 8 < 128)
         "Fix: set 'Jwt:Key' to a 16+ byte secret (e.g. a 16+ byte base64 string or a long passphrase). " +
         "To generate a secure base64 key: use `openssl rand -base64 24` or `dotnet user-secrets set \"Jwt:Key\" \"$(Convert.ToBase64String(RandomNumberGenerator.GetBytes(24)))\"`.");
 }
-var mongoConn = builder.Configuration["MongoDbSettings:ConnectionString"];
+
 // Generate lowercase URLs (makes [controller] tokens lowercase in routes and Swagger)
 builder.Services.AddRouting(options => options.LowercaseUrls = true);
 builder.Services.AddControllers();
@@ -72,14 +81,42 @@ builder.Services.AddScoped<Involved_Chat.Services.AuthService>();
 builder.Services.AddScoped<Involved_Chat.Services.MessageService>();
 // Authorization should be added before building the app so middleware is available
 builder.Services.AddAuthorization();
-builder.Services.Configure<MongoDbSettings>(
-    builder.Configuration.GetSection("MongoDbSettings")); //getting mongo settings
-// Register the MongoDB client as a singleton so it can be injected where needed
+string mongoConn;
+string mongoDbName;
+
+if (builder.Environment.IsDevelopment())
+{
+    mongoConn = builder.Configuration["MongoDbSettings:ConnectionString"]
+        ?? throw new InvalidOperationException("Missing MongoDbSettings:ConnectionString in config.");
+    mongoDbName = builder.Configuration["MongoDbSettings:DatabaseName"]
+        ?? throw new InvalidOperationException("Missing MongoDbSettings:DatabaseName in config.");
+}
+else
+{
+    mongoConn = GetSecret("mongodb_connection");
+    mongoDbName = GetSecret("mongodb_database");
+
+    if (string.IsNullOrEmpty(mongoConn) || string.IsNullOrEmpty(mongoDbName))
+        throw new InvalidOperationException("Mongo secrets not found in Secret Manager.");
+}
+
+// bind config manually for DI
+builder.Services.Configure<MongoDbSettings>(options =>
+{
+    options.ConnectionString = mongoConn;
+    options.DatabaseName = mongoDbName;
+});
+
+// register MongoClient
 builder.Services.AddSingleton<IMongoClient>(sp =>
 {
-    var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<MongoDbSettings>>().Value;
-    return new MongoClient(settings.ConnectionString);
+    return new MongoClient(mongoConn);
 });
+
+// register MongoDbContext (constructor will receive IOptions<MongoDbSettings> + IMongoClient)
+builder.Services.AddSingleton<MongoDbContext>();
+
+
 builder.Services.AddSingleton<MongoDbContext>(); //Register context
 
 builder.Services.AddHealthChecks()
@@ -93,9 +130,11 @@ builder.Services.AddHealthChecks()
 builder.Services
     .AddHealthChecksUI(options =>
     {
-        options.SetEvaluationTimeInSeconds(10); // refresh interval
+        options.SetEvaluationTimeInSeconds(5000); // refresh interval
         options.AddHealthCheckEndpoint("default", "/health/ready"); // endpoint to check
-    });
+    })
+    // Provide storage for HealthChecks UI (required). In-memory is fine for dev / demos.
+    .AddInMemoryStorage();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
