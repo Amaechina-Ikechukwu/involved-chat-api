@@ -1,51 +1,66 @@
-# Involved Chat API
+# Involved — Chat API (Backend)
 
-A lightweight ASP.NET Core 9.0 backend service providing the foundation for a chat application with JWT-based authentication and MongoDB persistence.
+A lightweight ASP.NET Core 9 backend that provides the foundation for a modern chat / conversation platform.
 
-> Status: Early scaffolding phase – authentication service and data models exist; controllers / hubs are not yet implemented.
+This repository contains the minimal building blocks: MongoDB-backed models, an authentication service that issues JWTs, and a scaffolded app host (OpenAPI and SignalR readiness). The project is in early development: core services and models exist, but public controllers and the SignalR hub are still being wired up.
 
-## ✨ Features (Current)
-- .NET 9 minimal hosting
-- MongoDB integration via a simple context wrapper (`MongoDbContext`)
-- User & Message domain models
-- Basic authentication service (`AuthService`) with:
-  - SHA-256 password hashing (no salt yet – see Improvements)
-  - JWT issuance (Issuer / Audience / Key from config)
-  - 7‑day token lifetime
-- OpenAPI (Swagger UI) auto-exposed in Development environment
-- Environment-based configuration (`appsettings*.json`)
+## Quick summary
+- Runtime: .NET 9 (ASP.NET Core)
+- Database: MongoDB
+- Auth: JWT (HMAC-SHA256 currently)
+- API docs: OpenAPI / Swagger (Development only)
 
-## 🧱 Architecture Overview
+Use this repo as a starting point for implementing a chat backend with token-based auth and SignalR-powered real-time messaging.
+
+## What's in this repo
+- `Program.cs` — app bootstrap, DI, JWT auth, OpenAPI setup
+- `Data/MongoDbContext.cs` — MongoDB client + typed collections
+- `Models/Users.cs`, `Models/Messages.cs` — domain models
+- `Services/AuthService.cs` — registration, login, JWT issuance
+- `Hubs/ChatHub.cs` — SignalR hub scaffold (hub logic can be extended)
+- `Controllers/` — placeholder for future controllers (Auth/Message controllers not yet enabled)
+- `appsettings*.json` — configuration templates
+
+## Quickstart (local development)
+Make sure .NET 9 SDK and a running MongoDB instance are available.
+
+1. Restore dependencies
+
+```powershell
+dotnet restore
 ```
-root
-├── Program.cs              -> App bootstrap, DI, JWT auth, OpenAPI
-├── Data/
-│   └── MongoDbContext.cs   -> Mongo connection + typed collections
-├── Models/
-│   ├── Users.cs            -> User entity (Id, Username, Email, PasswordHash, CreatedAt)
-│   └── Messages.cs         -> Message entity (FromUserId, ToUserId, Content, SentAt, IsRead)
-├── Services/
-│   └── AuthService.cs      -> Registration & Login + JWT issuing
-├── appsettings.json        -> Mongo + JWT config (placeholders)
-└── appsettings.Development.json -> Dev logging overrides
+
+2. Configure settings
+
+Copy `appsettings.Development.json` or edit `appsettings.json` to set your MongoDB connection and JWT settings. At minimum set a secure `Jwt:Key` for local development.
+
+3. Run the app (Development)
+
+```powershell
+dotnet run
 ```
 
-Planned (referenced but not yet implemented):
-- SignalR hub at `/chatHub` (JWT extraction from query string is already wired in the JWT bearer events)
-- Controller endpoints (currently `app.MapControllers();` is commented out in `Program.cs` — uncomment after adding controllers)
+4. Open the app
 
-## 🛠 Tech Stack
-- **Language / Runtime:** .NET 9 (ASP.NET Core)
-- **Database:** MongoDB
-- **Auth:** JWT (HMAC SHA-256)
-- **Documentation:** OpenAPI / Swagger UI (Development)
+- API root: https://localhost:{port} (port shown in console)
+- Swagger UI (Development): https://localhost:{port}/swagger
 
-## ⚙️ Configuration
-Defined in `appsettings.json` (replace `PLACEHOLDER` values):
+## Configuration
+Edit `appsettings.json` or use environment variables. Key sections:
+
+- `MongoDbSettings`:
+  - `ConnectionString` — e.g. `mongodb://localhost:27017`
+  - `DatabaseName` — e.g. `involved`
+- `Jwt`:
+  - `Key` — HMAC key (use a secure random secret in production)
+  - `Issuer` / `Audience` — token validation values
+
+Example snippet:
+
 ```jsonc
 {
   "MongoDbSettings": {
-    "ConnectionString": "mongodb://localhost:27017", // example
+    "ConnectionString": "mongodb://localhost:27017",
     "DatabaseName": "involved"
   },
   "Jwt": {
@@ -55,89 +70,23 @@ Defined in `appsettings.json` (replace `PLACEHOLDER` values):
   }
 }
 ```
-You can override via environment variables (ASP.NET Core standard mapping) or `appsettings.Development.json` for local dev.
 
-Note: The `appsettings.Development.json` in this project contains a 32-character development JWT key to satisfy HS256 minimum key length. Do NOT commit production secrets; use environment variables or a secrets manager for real deployments.
+Recommended key generation (PowerShell):
 
-### Recommended Secure Key Generation
 ```powershell
-# Windows PowerShell
 [Convert]::ToBase64String((New-Object System.Security.Cryptography.RNGCryptoServiceProvider).GetBytes(32))
 ```
 
-## ▶️ Running Locally
-From the repository root:
-```powershell
-# Restore
-dotnet restore
+Do not commit production secrets. Use environment variables or a secrets manager.
 
-# Run (Development)
-dotnet run
+## API overview (current)
+The project currently contains an `AuthService` that performs:
 
-# (Optional) Build
-dotnet build -c Release
-```
-Navigate to: `https://localhost:5001` (or the HTTPS port shown in console)
-Swagger UI (Development): `https://localhost:5001/swagger` or as mapped by OpenAPI configuration: `/openapi/v1.json` for the raw document.
+- Register (hashes password and stores a user)
+- Login (validates credentials and returns a JWT)
 
-## 🔐 Authentication Flow
-`AuthService` exposes two core operations internally (not yet surfaced via a controller):
-- `RegisterAsync(username, email, password)` – hashes password with SHA-256 and stores user.
-- `LoginAsync(email, password)` – validates credentials and returns a JWT with claims:
-  - `nameid` (User Id)
-  - `name` (Username)
-  - `email` (Email)
+Controllers exposing these operations are not yet enabled — see `Controllers/` and `Program.cs` for where to add them. Example controller sketch (implement under `Controllers/AuthController.cs`):
 
-JWT settings:
-- Expiry: 7 days
-- Signing: SymmetricSecurityKey (HMAC-SHA256)
-- Validation: Issuer, Audience, Lifetime, and Signing Key enforced
-
-SignalR readiness: The JWT bearer events are configured to read an `access_token` from the query string for paths beginning with `/chatHub` (hub not yet added).
-
-## 🧾 Data Models
-### User
-| Field | Type | Notes |
-|-------|------|-------|
-| Id | string (ObjectId) | MongoDB primary key |
-| Username | string | Unique expectation (not yet enforced) |
-| Email | string | Uniqueness enforced during registration |
-| PasswordHash | string | SHA-256 hash (no salt) |
-| CreatedAt | DateTime (UTC) | Set on creation |
-
-### Message
-| Field | Type | Notes |
-|-------|------|-------|
-| Id | string (ObjectId) | MongoDB primary key |
-| FromUserId | string (ObjectId) | Sender reference |
-| ToUserId | string (ObjectId) | Recipient reference |
-| Content | string | Message body |
-| SentAt | DateTime (UTC) | Defaults to now |
-| IsRead | bool | Read status |
-
-## 🚧 Missing / To Be Implemented
-- Public API controllers for auth (register/login) & messaging
-- SignalR chat hub (`/chatHub`)
-- Message persistence endpoints (list, send, mark read)
-- User lookup / profile endpoints
-- Validation & error handling middleware
-- Logging enrichment / structured logging
-- Dockerfile + container orchestration
-- Unit / integration tests
-
-## ✅ Suggested Next Steps
-1. Add `AuthController` exposing register/login endpoints
-2. Add SignalR Hub & map to `/chatHub`
-3. Introduce DTOs to avoid exposing `PasswordHash`
-4. Add password hashing with salt & pepper (e.g., BCrypt / PBKDF2 / Argon2)
-5. Introduce refresh tokens if long-lived sessions are required
-6. Add rate limiting for auth endpoints
-7. Implement repository or service abstractions for testability
-8. Add automated tests (xUnit / NUnit) + GitHub Actions CI
-9. Provide Dockerfile & docker-compose (Mongo + API)
-10. Add pagination / indexing for message queries
-
-## 🧪 Example Controller Sketch (Future)
 ```csharp
 [ApiController]
 [Route("api/auth")]
@@ -162,18 +111,68 @@ public class AuthController : ControllerBase
 }
 ```
 
-## 🔐 Security Considerations (Planned Improvements)
-- Replace raw SHA-256 hashing with a slow hashing algorithm (Argon2id recommended)
-- Enforce password complexity & length rules
-- Add account lockout / throttling
-- Ensure HTTPS enforced in production (HSTS)
-- Consider secret storage (Azure Key Vault / AWS Secrets Manager) for JWT key & Mongo credentials
+## SignalR notes
+The JWT bearer options are preconfigured to allow passing the `access_token` via query string for SignalR connections to the hub path (typically `/chatHub`). This is convenient for browsers that connect via WebSockets and cannot set Authorization headers during the initial handshake.
 
-## 🧭 License
-Add a license (e.g., MIT) at this stage if open sourcing.
+When you implement the client-side connection, connect like this (JS example):
 
-## 🙌 Contributing
-Not yet open for external contributions. Once stabilized: fork → branch → PR.
+```javascript
+// Web client using @microsoft/signalr
+const connection = new signalR.HubConnectionBuilder()
+  .withUrl("/chatHub", { accessTokenFactory: () => token })
+  .build();
+
+await connection.start();
+```
+
+## Data model summary
+
+User (partial):
+- Id (ObjectId as string)
+- Username
+- Email
+- PasswordHash (currently SHA-256; see Security section)
+- CreatedAt (UTC)
+
+Message (partial):
+- Id (ObjectId as string)
+- FromUserId, ToUserId
+- Content
+- SentAt (UTC)
+- IsRead (bool)
+
+## Security notes and recommended improvements
+Current implementation uses SHA-256 for password hashing (without salt). This is NOT recommended for production.
+
+Planned improvements you should implement before production:
+
+- Replace SHA-256 with a slow, memory-hard password hashing algorithm (Argon2id, BCrypt, or PBKDF2 with strong parameters)
+- Add per-user salt and optional application-wide pepper
+- Enforce password complexity and rate-limit auth endpoints
+- Use HTTPS + HSTS in production and store secrets in a secrets manager (Azure Key Vault, AWS Secrets Manager, etc.)
+- Consider refresh tokens for session management
+
+## Roadmap / TODOs
+- Add `AuthController` and expose register/login endpoints (PR-ready example in README)
+- Implement `MessageController` for sending, listing, and marking messages read
+- Harden password hashing and migrate existing users safely
+- Add unit & integration tests (xUnit) and CI (GitHub Actions)
+- Dockerize API and add a `docker-compose` setup with MongoDB for local dev
+- Add pagination, query indexing, and performance tests for message queries
+
+## How you can help / Contributing
+- Add controllers and DTOs to avoid exposing `PasswordHash`
+- Implement secure password hashing and account policies
+- Add tests for `AuthService` and `MessageService`
+
+When contributing: fork → branch → open a pull request. Keep changes focused and include tests for behavior changes.
+
+## Running & debugging tips
+- Use `appsettings.Development.json` for local overrides. The project exposes Swagger only in the Development environment.
+- If the app doesn't start, check the console for missing configuration values (Mongo connection or JWT key).
+
+## License
+Add a license file (e.g., MIT) if you plan to open source this repository.
 
 ---
-Generated README based on current repository contents (Program, Models, Services, Config). Update as new controllers and hubs are added.
+This README was updated to provide a clearer quickstart, configuration guidance, and prioritized next steps for turning this scaffold into a production-ready chat backend.
