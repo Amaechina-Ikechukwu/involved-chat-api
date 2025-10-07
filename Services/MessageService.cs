@@ -13,56 +13,38 @@ namespace Involved_Chat.Services
             _context = context;
         }
 
-        public async Task<Message?> SendMessageAsync(string fromUserId, string toUserId, string content)
+public async Task<Message> SendMessageAsync(string chatId, string senderId, string receiverId, string content)
+    {
+        var message = new Message
         {
-            var fromExists = await _context.Users.Find(u => u.Id == fromUserId).AnyAsync();
-            var toExists = await _context.Users.Find(u => u.Id == toUserId).AnyAsync();
+            ChatId = chatId,
+            SenderId = senderId,
+            ReceiverId = receiverId,
+            Content = content,
+            SentAt = DateTime.UtcNow,
+            Status = "sent"
+        };
 
-            if (!fromExists || !toExists)
-            {
-                // return null so callers can respond with 404 or validation error
-                return null;
-            }
+        await _context.Messages.InsertOneAsync(message);
+        return message;
+    }
 
-            var message = new Message
-            {
-                FromUserId = fromUserId,
-                ToUserId = toUserId,
-                Content = content,
-                SentAt = DateTime.UtcNow
-            };
+    public async Task<List<Message>> GetMessagesAsync(string chatId, int limit = 50)
+    {
+        return await _context.Messages.Find(m => m.ChatId == chatId)
+            .SortByDescending(m => m.SentAt)
+            .Limit(limit)
+            .ToListAsync();
+    }
 
-            await _context.Messages.InsertOneAsync(message);
-            return message;
-
-
-
-        }
-
-        public async Task<List<Message>> GetConversations(string userA, string userB)
-        {
-            var filter = Builders<Message>.Filter.Or(
-               Builders<Message>.Filter.And(
-                   Builders<Message>.Filter.Eq(m => m.FromUserId, userA),
-                   Builders<Message>.Filter.Eq(m => m.ToUserId, userB)
-               ),
-               Builders<Message>.Filter.And(
-                   Builders<Message>.Filter.Eq(m => m.FromUserId, userB),
-                   Builders<Message>.Filter.Eq(m => m.ToUserId, userA)
-               )
-           );
-
-            return await _context.Messages
-                .Find(filter)
-                .SortBy(m => m.SentAt)
-                .ToListAsync();
-        }
-
-        public async Task MarkAsReadAsync(string user, string messageId)
-        {
-            var update = Builders<Message>.Update.Set(m => m.IsRead, true); //get what you want to update and set it
-            await _context.Messages.FindOneAndUpdateAsync(m => m.Id == messageId && m.ToUserId == user, update);
-            
-        }
+    public async Task MarkAsReadAsync(string chatId, string receiverId)
+    {
+        var filter = Builders<Message>.Filter.And(
+            Builders<Message>.Filter.Eq(m => m.ChatId, chatId),
+            Builders<Message>.Filter.Eq(m => m.ReceiverId, receiverId)
+        );
+        var update = Builders<Message>.Update.Set(m => m.Status, "read");
+        await _context.Messages.UpdateManyAsync(filter, update);
+    }
     }
 }

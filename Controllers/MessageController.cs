@@ -19,15 +19,11 @@ namespace Involved_Chat.Controllers
             _messageService = messageService;
         }
 
-        [HttpPost("conversations/{userId}")]
-        public async Task<IActionResult> GetConversationsAsync(string userId)
+        [HttpPost("conversations/{chatId}")]
+        public async Task<IActionResult> GetConversationsAsync(string chatId)
         {
-            var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (currentUserId == null)
-            {
-                return Unauthorized();
-            }
-            var messages = await _messageService.GetConversations(currentUserId, userId);
+           
+            var messages = await _messageService.GetMessagesAsync(chatId);
             return Ok(messages);
         }
     }
