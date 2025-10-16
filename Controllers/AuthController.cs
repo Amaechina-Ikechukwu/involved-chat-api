@@ -21,7 +21,18 @@ namespace Involved_Chat.Controllers
             try
             {
                 var user = await _authService.RegisterAsync(request.Username, request.Email, request.Password);
-                return Ok(new { user.Id, user.Username, user.Email });
+
+                // Generate token after successful registration
+                var token = await _authService.LoginAsync(request.Email, request.Password);
+
+                var data = new {
+                    token,
+                    id = user.Id,
+                    username = user.Username,
+                    email = user.Email
+                };
+
+                return Ok(new { message = "User registered successfully", data,success=true });
             }
             catch (Exception ex){
                 return BadRequest(new { message = ex.Message });
@@ -39,7 +50,18 @@ namespace Involved_Chat.Controllers
                 {
                     return Unauthorized(new { error = "Invalid Credential" });
                 }
-                return Ok(new { token });
+
+                // fetch user to include details in response
+                var user = await _authService.GetUserByEmailAsync(request.Email);
+
+                var data = new {
+                    token,
+                    id = user?.Id,
+                    username = user?.Username,
+                    email = user?.Email
+                };
+
+                return Ok(new { message = "Login successful", data,success=true });
             }
             catch (Exception ex)
             {

@@ -69,5 +69,10 @@ namespace Involved_Chat.Services
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
+
+        public async Task<User?> GetUserByEmailAsync(string email)
+        {
+            return await _context.Users.Find(u => u.Email == email).FirstOrDefaultAsync();
+        }
     }
 }

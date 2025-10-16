@@ -17,13 +17,13 @@ namespace Involved_Chat.Services
     public async Task<Chat> GetOrCreateChatAsync(string userAId, string userBId)
     {
         string chatId = GenerateChatId(userAId, userBId);
-        var chat = await _context.Chats.Find(c => c.Id == chatId).FirstOrDefaultAsync();
+        var chat = await _context.Chats.Find(c => c.ChatKey == chatId).FirstOrDefaultAsync();
 
         if (chat == null)
         {
             chat = new Chat
             {
-                Id = chatId,
+                ChatKey = chatId,
                 UserAId = userAId,
                 UserBId = userBId,
                 CreatedAt = DateTime.UtcNow
@@ -47,6 +47,7 @@ namespace Involved_Chat.Services
             .Set(c => c.LastMessageTime, time)
             .Set(c => c.LastMessageSenderId, senderId);
 
+        // Update by chat document Id (ObjectId string)
         await _context.Chats.UpdateOneAsync(c => c.Id == chatId, update);
     }
 

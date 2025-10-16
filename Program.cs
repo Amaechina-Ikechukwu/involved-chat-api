@@ -79,6 +79,8 @@ builder.Services.AddOpenApiDocument(options =>
 // Register application services
 builder.Services.AddScoped<Involved_Chat.Services.AuthService>();
 builder.Services.AddScoped<Involved_Chat.Services.MessageService>();
+builder.Services.AddScoped<Involved_Chat.Services.UserService>();
+builder.Services.AddScoped<Involved_Chat.Services.ChatService>();
 // Authorization should be added before building the app so middleware is available
 builder.Services.AddAuthorization();
 string mongoConn;

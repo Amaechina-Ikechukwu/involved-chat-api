@@ -8,7 +8,7 @@ namespace Involved_Chat.Models
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; } = null!;
-
+public string ChatKey { get; set; } = null!; // ✅ store "userA_userB" here
         [BsonElement("userAId")]
         [BsonRepresentation(BsonType.ObjectId)]
         public string UserAId { get; set; } = null!;
