@@ -16,7 +16,18 @@ namespace Involved_Chat.DTOS
         public string? Status { get; set; }
         public List<string> Contacts { get; set; } = new();
         public List<string> ConnectionIds { get; set; } = new();
+        public List<string> PushTokens { get; set; } = new();
+        public LocationDto? Location { get; set; }
         public string? About { get; set; }
         public List<string> BlockedUsers { get; set; } = new();
+    }
+}
+
+namespace Involved_Chat.DTOS
+{
+    public class LocationDto
+    {
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
     }
 }

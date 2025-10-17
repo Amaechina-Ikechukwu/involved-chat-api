@@ -10,6 +10,8 @@ using HealthChecks.MongoDb;
 using Involved_Chat.Models;
 using Involved_Chat.Services; // MongoDB health check extension
 using Google.Cloud.SecretManager.V1;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Versioning;
 var builder = WebApplication.CreateBuilder(args);
 
 
@@ -171,6 +173,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             }
         };
     });
+builder.Services.AddApiVersioning(options =>
+{
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.ReportApiVersions = true;
+    options.ApiVersionReader = ApiVersionReader.Combine(
+        new UrlSegmentApiVersionReader(), // v{version} in route
+        new HeaderApiVersionReader("x-api-version") // optional header override
+    );
+});
+
+// Add versioned API explorer for OpenAPI grouping
+builder.Services.AddVersionedApiExplorer(options =>
+{
+    options.GroupNameFormat = "'v'VVV";
+    options.SubstituteApiVersionInUrl = true;
+});
 
 var app = builder.Build();
 

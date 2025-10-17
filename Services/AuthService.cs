@@ -2,11 +2,13 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using Involved_Chat.Data;
 using Involved_Chat.Models;
 using MongoDB.Driver;
+using MongoDB.Bson;
 
 namespace Involved_Chat.Services
 {
@@ -29,6 +31,11 @@ namespace Involved_Chat.Services
 
         public async Task<User?> RegisterAsync(string username, string email, string password)
         {
+            // Ensure username is unique (case-insensitive)
+            var usernameFilter = Builders<User>.Filter.Regex(u => u.Username, new BsonRegularExpression($"^{Regex.Escape(username)}$", "i"));
+            if (await _context.Users.Find(usernameFilter).AnyAsync())
+                throw new Exception("Username already exists");
+
             if (await _context.Users.Find(u => u.Email == email).AnyAsync())
                 throw new Exception("Email already exists");
 

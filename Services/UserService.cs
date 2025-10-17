@@ -41,6 +41,13 @@ namespace Involved_Chat.Services
             await _context.Users.UpdateOneAsync(u => u.Id == userId, update);
         }
 
+        public async Task UpdateDisplayNameAsync(string userId, string displayName)
+        {
+            if (displayName == null) displayName = string.Empty;
+            var update = Builders<User>.Update.Set(u => u.DisplayName, displayName);
+            await _context.Users.UpdateOneAsync(u => u.Id == userId, update);
+        }
+
         public async Task BlockUserAsync(string userId, string blockUserId)
         {
             var update = Builders<User>.Update.AddToSet(u => u.BlockedUsers, blockUserId);
@@ -67,12 +74,35 @@ namespace Involved_Chat.Services
                 LastSeen = u.LastSeen,
                 Status = u.Status,
                 Contacts = u.Contacts,
+                PushTokens = u.PushTokens,
+                Location = u.Location == null ? null : new DTOS.LocationDto { Latitude = u.Location.Latitude, Longitude = u.Location.Longitude },
                 ConnectionIds = u.ConnectionIds,
                 About = u.About,
                 BlockedUsers = u.BlockedUsers
             });
 
             return await _context.Users.Find(u => u.Id == userId).Project(projection).FirstOrDefaultAsync();
+        }
+
+        public async Task AddPushTokenAsync(string userId, string pushToken)
+        {
+            if (string.IsNullOrWhiteSpace(pushToken)) return;
+            var update = Builders<User>.Update.AddToSet(u => u.PushTokens, pushToken);
+            await _context.Users.UpdateOneAsync(u => u.Id == userId, update);
+        }
+
+        public async Task RemovePushTokenAsync(string userId, string pushToken)
+        {
+            if (string.IsNullOrWhiteSpace(pushToken)) return;
+            var update = Builders<User>.Update.Pull(u => u.PushTokens, pushToken);
+            await _context.Users.UpdateOneAsync(u => u.Id == userId, update);
+        }
+
+        public async Task UpdateLocationAsync(string userId, double? latitude, double? longitude)
+        {
+            var location = new UserLocation { Latitude = latitude, Longitude = longitude };
+            var update = Builders<User>.Update.Set(u => u.Location, location);
+            await _context.Users.UpdateOneAsync(u => u.Id == userId, update);
         }
 
         // Return list of user ids the user has exchanged messages with (either sender or receiver)

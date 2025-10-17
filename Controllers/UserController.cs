@@ -11,7 +11,10 @@ using Google.Cloud.SecretManager.V1;
 namespace Involved_Chat.Controllers
 {
     [ApiController]
+    
+    [ApiVersion("1.0")]
     [Route("api/[controller]")]
+    [Route("api/v{version:apiVersion}/[controller]")]
     public class UserController : ControllerBase
     {
         private readonly UserService _userService;
@@ -85,6 +88,14 @@ namespace Involved_Chat.Controllers
             return Ok(new{message="About updated",success=true});
         }
 
+        [HttpPut("{id}/displayname")]
+        public async Task<IActionResult> UpdateDisplayName(string id, [FromBody] DisplayNameDto dto)
+        {
+            if (dto == null) return BadRequest();
+            await _userService.UpdateDisplayNameAsync(id, dto.DisplayName ?? string.Empty);
+            return Ok(new { message = "Display name updated", success = true });
+        }
+
         [HttpPost("{id}/block")]
         public async Task<IActionResult> BlockUser(string id, [FromBody] BlockDto dto)
         {
@@ -107,6 +118,30 @@ namespace Involved_Chat.Controllers
             var contacts = await _userService.GetContactsAsync(id);
             return Ok(contacts);
         }
+
+        [HttpPost("{id}/push-token")]
+        public async Task<IActionResult> AddPushToken(string id, [FromBody] PushTokenDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.PushToken)) return BadRequest("pushToken is required");
+            await _userService.AddPushTokenAsync(id, dto.PushToken);
+            return Ok(new { message = "Push token added", success = true });
+        }
+
+        [HttpDelete("{id}/push-token")]
+        public async Task<IActionResult> RemovePushToken(string id, [FromBody] PushTokenDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.PushToken)) return BadRequest("pushToken is required");
+            await _userService.RemovePushTokenAsync(id, dto.PushToken);
+            return Ok(new { message = "Push token removed", success = true });
+        }
+
+        [HttpPut("{id}/location")]
+        public async Task<IActionResult> UpdateLocation(string id, [FromBody] LocationUpdateDto dto)
+        {
+            if (dto == null) return BadRequest();
+            await _userService.UpdateLocationAsync(id, dto.Latitude, dto.Longitude);
+            return Ok(new { message = "Location updated", success = true });
+        }
     }
 
     public class PhotoUpdateDto
@@ -122,5 +157,21 @@ namespace Involved_Chat.Controllers
     public class BlockDto
     {
         public string TargetUserId { get; set; } = null!;
+    }
+
+    public class PushTokenDto
+    {
+        public string PushToken { get; set; } = null!;
+    }
+
+    public class DisplayNameDto
+    {
+        public string? DisplayName { get; set; }
+    }
+
+    public class LocationUpdateDto
+    {
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
     }
 }

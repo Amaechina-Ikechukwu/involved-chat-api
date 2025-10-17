@@ -44,10 +44,25 @@ namespace Involved_Chat.Models
         [BsonElement("connectionIds")]
         public List<string> ConnectionIds { get; set; } = new(); // active SignalR connection IDs (if multi-device)
 
+    [BsonElement("pushTokens")]
+    public List<string> PushTokens { get; set; } = new(); // Expo push tokens or other push tokens
+
+    [BsonElement("location")]
+    public UserLocation? Location { get; set; }
+
         [BsonElement("about")]
         public string? About { get; set; } // short bio
 
         [BsonElement("blockedUsers")]
         public List<string> BlockedUsers { get; set; } = new(); // optional: for privacy control
+    }
+
+    public class UserLocation
+    {
+        [BsonElement("latitude")]
+        public double? Latitude { get; set; }
+
+        [BsonElement("longitude")]
+        public double? Longitude { get; set; }
     }
 }
