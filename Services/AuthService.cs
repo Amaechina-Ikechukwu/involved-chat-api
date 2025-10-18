@@ -9,18 +9,30 @@ using Involved_Chat.Data;
 using Involved_Chat.Models;
 using MongoDB.Driver;
 using MongoDB.Bson;
-
+using Google.Cloud.SecretManager.V1;
 namespace Involved_Chat.Services
 {
     public class AuthService
     {
         private readonly MongoDbContext _context;
         private readonly IConfiguration _config;
+    private readonly string _jwtKey;
 
+       
+
+        // --- Helper Method ---
+        private static string GetSecret(string secretId)
+        {
+            var client = SecretManagerServiceClient.Create();
+            var secretName = new SecretVersionName("tangle2", secretId, "latest");
+            var result = client.AccessSecretVersion(secretName);
+            return result.Payload.Data.ToStringUtf8();
+        }
         public AuthService(MongoDbContext context, IConfiguration config)
         {
             _context = context;
             _config = config;
+            _jwtKey = GetSecret("jwt_key");
         }
 
         private static string HashPassword(string password)
@@ -69,7 +81,7 @@ namespace Involved_Chat.Services
                 new Claim(ClaimTypes.Email, user.Email)
             };
 
-            var jwtKey = _config["Jwt:Key"];
+            var jwtKey = _jwtKey;
             if (string.IsNullOrEmpty(jwtKey)) throw new InvalidOperationException("JWT key is not configured. Please set Jwt:Key in configuration.");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
