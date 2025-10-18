@@ -25,12 +25,16 @@ namespace Involved_Chat.Services
 
         private static string HashPassword(string password)
         {
+            if (password == null) throw new ArgumentNullException(nameof(password));
             var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(password));
             return Convert.ToBase64String(bytes);
         }
 
         public async Task<User?> RegisterAsync(string username, string email, string password)
         {
+            if (string.IsNullOrWhiteSpace(username)) throw new ArgumentException("username is required", nameof(username));
+            if (string.IsNullOrWhiteSpace(email)) throw new ArgumentException("email is required", nameof(email));
+            if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("password is required", nameof(password));
             // Ensure username is unique (case-insensitive)
             var usernameFilter = Builders<User>.Filter.Regex(u => u.Username, new BsonRegularExpression($"^{Regex.Escape(username)}$", "i"));
             if (await _context.Users.Find(usernameFilter).AnyAsync())
@@ -52,6 +56,8 @@ namespace Involved_Chat.Services
 
         public async Task<string?> LoginAsync(string email, string password)
         {
+            if (string.IsNullOrWhiteSpace(email)) throw new ArgumentException("email is required", nameof(email));
+            if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("password is required", nameof(password));
             var user = await _context.Users.Find(u => u.Email == email).FirstOrDefaultAsync();
             if (user == null || user.PasswordHash != HashPassword(password))
                 return null;
@@ -63,7 +69,9 @@ namespace Involved_Chat.Services
                 new Claim(ClaimTypes.Email, user.Email)
             };
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
+            var jwtKey = _config["Jwt:Key"];
+            if (string.IsNullOrEmpty(jwtKey)) throw new InvalidOperationException("JWT key is not configured. Please set Jwt:Key in configuration.");
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var token = new JwtSecurityToken(
