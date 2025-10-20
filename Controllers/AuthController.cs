@@ -3,10 +3,12 @@ using Involved_Chat.Services;
 using Involved_Chat.AuthDtos;
 using Google.Cloud.SecretManager.V1;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Involved_Chat.Controllers
 {
     [ApiController]
+    [AllowAnonymous]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/[controller]")]
     public class AuthController : ControllerBase
@@ -44,6 +46,9 @@ namespace Involved_Chat.Controllers
 
                 // Generate token using AuthService (which can use _jwtKey internally)
                 var token = await _authService.LoginAsync(request.Email, request.Password);
+
+                if (user == null)
+                    return StatusCode(500, new { message = "User registration failed", success = false });
 
                 var data = new
                 {

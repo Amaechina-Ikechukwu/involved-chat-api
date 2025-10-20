@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using HealthChecks.UI.Client;
 using Involved_Chat.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -12,6 +13,8 @@ using Involved_Chat.Services; // MongoDB health check extension
 using Google.Cloud.SecretManager.V1;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Versioning;
+using Microsoft.AspNetCore.SignalR;
+
 var builder = WebApplication.CreateBuilder(args);
 
 
@@ -25,6 +28,8 @@ string GetSecret(string secretId)
 }
 
 var jwtKey = GetSecret("jwt_key");
+var jwtIssuer = GetSecret("jwt_issuer");
+var jwtAudience = GetSecret("jwt_audience");
 
 // Ensure the configured JWT key meets the minimum size for HS256
 if (string.IsNullOrEmpty(jwtKey))
@@ -83,6 +88,13 @@ builder.Services.AddScoped<Involved_Chat.Services.AuthService>();
 builder.Services.AddScoped<Involved_Chat.Services.MessageService>();
 builder.Services.AddScoped<Involved_Chat.Services.UserService>();
 builder.Services.AddScoped<Involved_Chat.Services.ChatService>();
+
+// Add SignalR for real-time chat
+builder.Services.AddSignalR();
+
+// Configure SignalR to use the user ID from JWT claims
+builder.Services.AddSingleton<IUserIdProvider, Involved_Chat.Services.CustomUserIdProvider>();
+
 // Authorization should be added before building the app so middleware is available
 builder.Services.AddAuthorization();
 string mongoConn;
@@ -140,6 +152,7 @@ builder.Services
     // Provide storage for HealthChecks UI (required). In-memory is fine for dev / demos.
     .AddInMemoryStorage();
 
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -149,8 +162,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
             // Use the already-decoded key bytes so base64-configured keys are honored.
             IssuerSigningKey = new SymmetricSecurityKey(jwtKeyBytes)
         };
@@ -169,6 +182,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     context.Token = accessToken;
                 }
 
+                return Task.CompletedTask;
+            },
+            OnAuthenticationFailed = context =>
+            {
+             
+                if (context.Exception is SecurityTokenExpiredException)
+                {
+                    context.Response.Headers.Append("Token-Expired", "true");
+                }
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                var userId = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+               return Task.CompletedTask;
+            },
+            OnChallenge = context =>
+            {
+             
                 return Task.CompletedTask;
             }
         };
@@ -229,5 +261,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<Involved_Chat.Hubs.ChatHub>("/chatHub");
 
 app.Run();

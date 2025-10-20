@@ -1,8 +1,10 @@
 using Involved_Chat.Services;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Involved_Chat.Hubs
 {
+    [Authorize]
     public class ChatHub : Hub
     {
         private readonly MessageService _messageService;

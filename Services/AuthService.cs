@@ -16,7 +16,9 @@ namespace Involved_Chat.Services
     {
         private readonly MongoDbContext _context;
         private readonly IConfiguration _config;
-    private readonly string _jwtKey;
+        private readonly string _jwtKey;
+        private readonly string _jwtIssuer;
+        private readonly string _jwtAudience;
 
        
 
@@ -33,6 +35,8 @@ namespace Involved_Chat.Services
             _context = context;
             _config = config;
             _jwtKey = GetSecret("jwt_key");
+            _jwtIssuer = GetSecret("jwt_issuer");
+            _jwtAudience = GetSecret("jwt_audience");
         }
 
         private static string HashPassword(string password)
@@ -77,24 +81,43 @@ namespace Involved_Chat.Services
             var claims = new[]
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id), // Standard JWT subject claim
                 new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Email, user.Email)
+                new Claim(ClaimTypes.Email, user.Email),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email) // Standard JWT email claim
             };
 
             var jwtKey = _jwtKey;
             if (string.IsNullOrEmpty(jwtKey)) throw new InvalidOperationException("JWT key is not configured. Please set Jwt:Key in configuration.");
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+            
+            // Match the key decoding logic from Program.cs
+            byte[] jwtKeyBytes;
+            try
+            {
+                // Try base64 decode first (same as Program.cs)
+                jwtKeyBytes = Convert.FromBase64String(jwtKey);
+            }
+            catch
+            {
+                // Not base64, fall back to UTF8 bytes
+                jwtKeyBytes = Encoding.UTF8.GetBytes(jwtKey);
+            }
+            
+            var key = new SymmetricSecurityKey(jwtKeyBytes);
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+           
             var token = new JwtSecurityToken(
-                issuer: _config["Jwt:Issuer"],
-                audience: _config["Jwt:Audience"],
+                issuer: _jwtIssuer,
+                audience: _jwtAudience,
                 claims: claims,
                 expires: DateTime.UtcNow.AddDays(7),
                 signingCredentials: creds
             );
 
-            return new JwtSecurityTokenHandler().WriteToken(token);
+            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+          
+            return tokenString;
         }
 
         public async Task<User?> GetUserByEmailAsync(string email)

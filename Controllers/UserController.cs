@@ -2,6 +2,8 @@ using Involved_Chat.Models;
 using Involved_Chat.DTOS;
 using Involved_Chat.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +13,7 @@ using Google.Cloud.SecretManager.V1;
 namespace Involved_Chat.Controllers
 {
     [ApiController]
-    
+    [Authorize]
     [ApiVersion("1.0")]
     [Route("api/[controller]")]
     [Route("api/v{version:apiVersion}/[controller]")]
@@ -50,6 +52,29 @@ namespace Involved_Chat.Controllers
             var user = await _userService.GetUserInfoAsync(id);
             if (user == null) return NotFound();
             return Ok(user);
+        }
+
+        // GET /api/user/me - returns the user info for the token owner
+        [HttpGet("me")]
+        public async Task<ActionResult<UserDto>> GetCurrentUser()
+        {
+            // Debug: Log all claims to help troubleshoot
+            var allClaims = User.Claims.Select(c => $"{c.Type}: {c.Value}").ToList();
+          
+            
+            // Jwt contains NameIdentifier claim with the user id (see AuthService.LoginAsync)
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value; // Fallback to standard JWT 'sub' claim
+            
+        
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
+            var user = await _userService.GetUserInfoAsync(userId);
+            if (user == null) return NotFound(new { message = "User not found", success = false });
+            
+            return Ok(new { message = "User info retrieved", data = user, success = true });
         }
 
         [HttpPut("{id}/photo")]
