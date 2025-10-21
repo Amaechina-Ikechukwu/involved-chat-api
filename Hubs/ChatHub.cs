@@ -58,9 +58,56 @@ namespace Involved_Chat.Hubs
             //Update chat preview
             await _chatService.UpdateChatPreviewAsync(chat.Id, senderId, content, message.SentAt);
 
-           
+            // Send message to receiver
+            await Clients.User(receiverId).SendAsync("ReceiveMessage", new
+            {
+                messageId = message.Id,
+                chatId = chat.Id,
+                senderId = senderId,
+                receiverId = receiverId,
+                content = content,
+                sentAt = message.SentAt
+            });
 
-            // 5️⃣ Notify sender (delivery confirmation)
+            // Notify both sender and receiver about chat update
+            var senderInfo = await _userService.GetUserInfoAsync(senderId);
+            var receiverInfo = await _userService.GetUserInfoAsync(receiverId);
+
+            // Send updated chat info to sender
+            await Clients.Caller.SendAsync("ChatUpdated", new
+            {
+                chatId = chat.Id,
+                otherUser = receiverInfo != null ? new
+                {
+                    id = receiverInfo.Id,
+                    displayName = receiverInfo.DisplayName,
+                    username = receiverInfo.Username,
+                    photoURL = receiverInfo.PhotoURL,
+                    isOnline = receiverInfo.IsOnline
+                } : null,
+                lastMessage = content,
+                lastMessageTime = message.SentAt,
+                lastMessageSenderId = senderId
+            });
+
+            // Send updated chat info to receiver
+            await Clients.User(receiverId).SendAsync("ChatUpdated", new
+            {
+                chatId = chat.Id,
+                otherUser = senderInfo != null ? new
+                {
+                    id = senderInfo.Id,
+                    displayName = senderInfo.DisplayName,
+                    username = senderInfo.Username,
+                    photoURL = senderInfo.PhotoURL,
+                    isOnline = senderInfo.IsOnline
+                } : null,
+                lastMessage = content,
+                lastMessageTime = message.SentAt,
+                lastMessageSenderId = senderId
+            });
+
+            // Notify sender (delivery confirmation)
             await Clients.Caller.SendAsync("MessageDelivered", message.Id);
         }
 
@@ -92,6 +139,75 @@ namespace Involved_Chat.Hubs
                 lastMessageSenderId = c.LastMessageSenderId,
                 receiverId = c.UserAId == userId ? c.UserBId : c.UserAId
             }).Cast<object>().ToList();
+        }
+
+        // Fetch and send enriched chat list to client via SignalR
+        public async Task GetIndiidualChats()
+        {
+            var userId = Context.UserIdentifier;
+            if (string.IsNullOrEmpty(userId))
+            {
+                await Clients.Caller.SendAsync("ChatsError", "User not authenticated");
+                return;
+            }
+
+            try
+            {
+                var chats = await _chatService.GetUserChatsAsync(userId);
+
+                // Enrich chat data with other user information
+                var enrichedChats = new List<object>();
+                foreach (var chat in chats)
+                {
+                    var otherUserId = chat.UserAId == userId ? chat.UserBId : chat.UserAId;
+                    var otherUser = await _userService.GetUserInfoAsync(otherUserId);
+
+                    // Calculate unread count for current user
+                    var unreadCount = chat.UserAId == userId ? chat.UnreadCountA : chat.UnreadCountB;
+
+                    enrichedChats.Add(new
+                    {
+                        chatId = chat.Id,
+                        otherUser = otherUser != null ? new
+                        {
+                            id = otherUser.Id,
+                            displayName = otherUser.DisplayName,
+                            username = otherUser.Username,
+                            photoURL = otherUser.PhotoURL,
+                            isOnline = otherUser.IsOnline,
+                            lastSeen = otherUser.LastSeen,
+                            status = otherUser.Status
+                        } : new
+                        {
+                            id = otherUserId,
+                            displayName = "Unknown User",
+                            username = string.Empty,
+                            photoURL = (string?)null,
+                            isOnline = false,
+                            lastSeen = (DateTime?)null,
+                            status = (string?)null
+                        },
+                        lastMessage = chat.LastMessage,
+                        lastMessageTime = chat.LastMessageTime,
+                        lastMessageSenderId = chat.LastMessageSenderId,
+                        unreadCount = unreadCount
+                    });
+                }
+
+                // Send enriched chats to the caller
+                await Clients.Caller.SendAsync("ReceiveChats", enrichedChats);
+            }
+            catch (Exception ex)
+            {
+                await Clients.Caller.SendAsync("ChatsError", $"Error fetching chats: {ex.Message}");
+            }
+        }
+
+        // Fetch messages for a specific chat
+        public async Task GetChatMessages(string chatId, int limit = 50)
+        {
+            var messages = await _messageService.GetMessagesAsync(chatId, limit);
+            await Clients.Caller.SendAsync("ReceiveChatMessages", messages);
         }
     }
 }
