@@ -39,6 +39,29 @@ public async Task<Message> SendMessageAsync(string chatId, string senderId, stri
 
     public async Task MarkAsReadAsync(string chatId, string receiverId)
     {
+        // First, update the unread count in the chat document
+        var chat = await _context.Chats.Find(c => c.Id == chatId).FirstOrDefaultAsync();
+        if (chat != null)
+        {
+            UpdateDefinition<Chat> chatUpdate;
+            if (chat.UserAId == receiverId)
+            {
+                chatUpdate = Builders<Chat>.Update.Set(c => c.UnreadCountA, 0);
+            }
+            else if (chat.UserBId == receiverId)
+            {
+                chatUpdate = Builders<Chat>.Update.Set(c => c.UnreadCountB, 0);
+            }
+            else
+            {
+                // receiverId does not match either user in the chat
+                return;
+            }
+
+            await _context.Chats.UpdateOneAsync(c => c.Id == chatId, chatUpdate);
+        }
+
+        // Then, update the status of the messages
         var filter = Builders<Message>.Filter.And(
             Builders<Message>.Filter.Eq(m => m.ChatId, chatId),
             Builders<Message>.Filter.Eq(m => m.ReceiverId, receiverId)

@@ -16,11 +16,13 @@ namespace Involved_Chat.Controllers
     {
         private readonly MessageService _messageService;
         private readonly ChatService _chatService;
+        private readonly UserService _userService;
 
-        public MessageController(MessageService messageService, ChatService chatService)
+        public MessageController(MessageService messageService, ChatService chatService, UserService userService)
         {
             _messageService = messageService;
             _chatService = chatService;
+            _userService = userService;
         }
 
         // Get conversation by userA/userB
@@ -56,7 +58,10 @@ namespace Involved_Chat.Controllers
             var chat = await _chatService.GetOrCreateChatAsync(userAId, userBId);
 
             var message = await _messageService.SendMessageAsync(chat.Id, senderId, receiverId, dto.Content);
-            await _chatService.UpdateChatPreviewAsync(chat.Id, senderId, dto.Content, message.SentAt);
+            await _chatService.UpdateChatPreviewAsync(chat.Id, senderId, receiverId, dto.Content, message.SentAt);
+
+            // Add both users to each other's contacts
+            await _userService.AddContactAsync(senderId, receiverId);
 
             return Ok(new { message = "Message sent", data = message, success = true });
         }

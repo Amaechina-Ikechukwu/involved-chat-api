@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
-using Microsoft.AspNetCore.Mvc;
 using Google.Cloud.SecretManager.V1;
 
 
@@ -166,6 +165,45 @@ namespace Involved_Chat.Controllers
             if (dto == null) return BadRequest();
             await _userService.UpdateLocationAsync(id, dto.Latitude, dto.Longitude);
             return Ok(new { message = "Location updated", success = true });
+        }
+
+        [HttpGet("nearby")]
+        public async Task<ActionResult<PaginatedUserResponse>> GetNearbyUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
+
+            var result = await _userService.GetNearbyUsersAsync(userId, page, pageSize);
+            return Ok(result);
+        }
+
+        [HttpGet("debug/locations")]
+        public async Task<IActionResult> DebugLocations()
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
+
+            var currentUser = await _userService.GetUserInfoAsync(userId);
+            var allUsersCount = await _userService.GetAllUsersWithLocationCountAsync();
+            
+            return Ok(new 
+            { 
+                currentUser = new 
+                {
+                    id = currentUser?.Id,
+                    username = currentUser?.Username,
+                    hasLocation = currentUser?.Location != null,
+                    location = currentUser?.Location
+                },
+                totalUsersWithLocation = allUsersCount,
+                message = "Debug info for nearby users feature"
+            });
         }
     }
 

@@ -63,7 +63,10 @@ namespace Involved_Chat.Hubs
             var message = await _messageService.SendMessageAsync(chat.Id, senderId, receiverId, content);
 
             // Update last message preview
-            await _chatService.UpdateChatPreviewAsync(chat.Id, senderId, content, message.SentAt);
+            await _chatService.UpdateChatPreviewAsync(chat.Id, senderId, receiverId, content, message.SentAt);
+
+            // Add both users to each other's contacts
+            await _userService.AddContactAsync(senderId, receiverId);
 
             // Send message to receiver (if online)
             await Clients.User(receiverId).SendAsync("ReceiveMessage", new
@@ -83,14 +86,21 @@ namespace Involved_Chat.Hubs
             var senderInfo = await _userService.GetUserInfoAsync(senderId);
             var receiverInfo = await _userService.GetUserInfoAsync(receiverId);
 
+            var chatForSender = await _chatService.GetChatByIdAsync(chat.Id);
+            var unreadCountForSender = chatForSender.UserAId == senderId ? chatForSender.UnreadCountA : chatForSender.UnreadCountB;
+
             await Clients.Caller.SendAsync("ChatUpdated", new
             {
                 chatId = chat.Id,
                 otherUser = receiverInfo,
                 lastMessage = content,
                 lastMessageTime = message.SentAt,
-                lastMessageSenderId = senderId
+                lastMessageSenderId = senderId,
+                unreadCount = unreadCountForSender
             });
+
+            var chatForReceiver = await _chatService.GetChatByIdAsync(chat.Id);
+            var unreadCountForReceiver = chatForReceiver.UserAId == receiverId ? chatForReceiver.UnreadCountA : chatForReceiver.UnreadCountB;
 
             await Clients.User(receiverId).SendAsync("ChatUpdated", new
             {
@@ -98,8 +108,13 @@ namespace Involved_Chat.Hubs
                 otherUser = senderInfo,
                 lastMessage = content,
                 lastMessageTime = message.SentAt,
-                lastMessageSenderId = senderId
+                lastMessageSenderId = senderId,
+                unreadCount = unreadCountForReceiver
             });
+
+            // Notify receiver of updated total unread count
+            var totalUnread = await _chatService.GetTotalUnreadCountAsync(receiverId);
+            await Clients.User(receiverId).SendAsync("ReceiveUnreadMessagesCount", totalUnread);
         }
 
         // 🔹 Mark all messages in chat as read
@@ -110,6 +125,10 @@ namespace Involved_Chat.Hubs
 
             await _messageService.MarkAsReadAsync(chatId, userId);
             await Clients.Caller.SendAsync("MessagesRead", chatId);
+
+            // Notify user of updated total unread count
+            var totalUnread = await _chatService.GetTotalUnreadCountAsync(userId);
+            await Clients.Caller.SendAsync("ReceiveUnreadMessagesCount", totalUnread);
         }
 
         // 🔹 Fetch all messages for a chat
@@ -172,6 +191,27 @@ namespace Involved_Chat.Hubs
             catch (Exception ex)
             {
                 await Clients.Caller.SendAsync("ChatsError", $"Error fetching chats: {ex.Message}");
+            }
+        }
+
+        // 🔹 Get total unread messages count
+        public async Task GetUnreadMessagesCount()
+        {
+            var userId = Context.UserIdentifier;
+            if (string.IsNullOrEmpty(userId))
+            {
+                await Clients.Caller.SendAsync("ChatsError", "User not authenticated");
+                return;
+            }
+
+            try
+            {
+                var unreadCount = await _chatService.GetTotalUnreadCountAsync(userId);
+                await Clients.Caller.SendAsync("ReceiveUnreadMessagesCount", unreadCount);
+            }
+            catch (Exception ex)
+            {
+                await Clients.Caller.SendAsync("ChatsError", $"Error fetching unread messages count: {ex.Message}");
             }
         }
     }

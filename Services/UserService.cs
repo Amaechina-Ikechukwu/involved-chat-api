@@ -62,26 +62,31 @@ namespace Involved_Chat.Services
 
         public async Task<UserDto?> GetUserInfoAsync(string userId)
         {
-            var projection = Builders<User>.Projection.Expression(u => new UserDto
-            {
-                Id = u.Id,
-                Username = u.Username,
-                Email = u.Email,
-                CreatedAt = u.CreatedAt,
-                DisplayName = u.DisplayName,
-                PhotoURL = u.PhotoURL,
-                IsOnline = u.IsOnline,
-                LastSeen = u.LastSeen,
-                Status = u.Status,
-                Contacts = u.Contacts,
-                PushTokens = u.PushTokens,
-                Location = u.Location == null ? null : new DTOS.LocationDto { Latitude = u.Location.Latitude, Longitude = u.Location.Longitude },
-                ConnectionIds = u.ConnectionIds,
-                About = u.About,
-                BlockedUsers = u.BlockedUsers
-            });
+            var user = await _context.Users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+            if (user == null) return null;
 
-            return await _context.Users.Find(u => u.Id == userId).Project(projection).FirstOrDefaultAsync();
+            return new UserDto
+            {
+                Id = user.Id,
+                Username = user.Username,
+                Email = user.Email,
+                CreatedAt = user.CreatedAt,
+                DisplayName = user.DisplayName,
+                PhotoURL = user.PhotoURL,
+                IsOnline = user.IsOnline,
+                LastSeen = user.LastSeen,
+                Status = user.Status,
+                Contacts = user.Contacts,
+                PushTokens = user.PushTokens,
+                Location = user.Location == null ? null : new DTOS.LocationDto 
+                { 
+                    Latitude = user.Location.Latitude, 
+                    Longitude = user.Location.Longitude 
+                },
+                ConnectionIds = user.ConnectionIds,
+                About = user.About,
+                BlockedUsers = user.BlockedUsers
+            };
         }
 
         public async Task AddPushTokenAsync(string userId, string pushToken)
@@ -105,6 +110,21 @@ namespace Involved_Chat.Services
             await _context.Users.UpdateOneAsync(u => u.Id == userId, update);
         }
 
+        // Add contact mutually (both users add each other)
+        public async Task AddContactAsync(string userId, string contactId)
+        {
+            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(contactId) || userId == contactId)
+                return;
+
+            // Add contactId to userId's contacts
+            var updateUser = Builders<User>.Update.AddToSet(u => u.Contacts, contactId);
+            await _context.Users.UpdateOneAsync(u => u.Id == userId, updateUser);
+
+            // Add userId to contactId's contacts
+            var updateContact = Builders<User>.Update.AddToSet(u => u.Contacts, userId);
+            await _context.Users.UpdateOneAsync(u => u.Id == contactId, updateContact);
+        }
+
         // Return list of user ids the user has exchanged messages with (either sender or receiver)
         public async Task<List<string>> GetContactsAsync(string userId)
         {
@@ -124,5 +144,85 @@ namespace Involved_Chat.Services
             return list.Where(id => !string.IsNullOrEmpty(id) && id != userId).Distinct().ToList();
         }
 
+        public async Task<PaginatedUserResponse> GetNearbyUsersAsync(string userId, int page, int pageSize)
+        {
+            var currentUser = await _context.Users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+            if (currentUser?.Location?.Latitude == null || currentUser?.Location?.Longitude == null)
+            {
+                return new PaginatedUserResponse { Users = new List<NearbyUserDto>() };
+            }
+
+            // Get all users with location data (exclude current user)
+            var filter = Builders<User>.Filter.And(
+                Builders<User>.Filter.Ne(u => u.Id, userId),
+                Builders<User>.Filter.Ne(u => u.Location, null)
+            );
+
+            var allUsers = await _context.Users.Find(filter).ToListAsync();
+
+            // Calculate distances and filter by 10km radius
+            var maxDistanceMeters = 10000.0; // 10km
+            var nearbyUsersWithDistance = allUsers
+                .Where(u => u.Location != null) // Additional null check for safety
+                .Select(u => new
+                {
+                    User = u,
+                    Distance = GetDistance(currentUser.Location, u.Location!)
+                })
+                .Where(x => x.Distance >= 0 && x.Distance <= maxDistanceMeters)
+                .OrderBy(x => x.Distance)
+                .ToList();
+
+            var total = nearbyUsersWithDistance.Count;
+
+            // Apply pagination
+            var paginatedUsers = nearbyUsersWithDistance
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new NearbyUserDto
+                {
+                    Id = x.User.Id,
+                    Username = x.User.Username,
+                    DisplayName = x.User.DisplayName,
+                    PhotoURL = x.User.PhotoURL,
+                    Distance = x.Distance
+                })
+                .ToList();
+
+            return new PaginatedUserResponse
+            {
+                Users = paginatedUsers,
+                Page = page,
+                PageSize = pageSize,
+                Total = total,
+                HasNextPage = (page * pageSize) < total
+            };
+        }
+
+        public async Task<int> GetAllUsersWithLocationCountAsync()
+        {
+            var filter = Builders<User>.Filter.Ne(u => u.Location, null);
+            return (int)await _context.Users.CountDocumentsAsync(filter);
+        }
+
+        private double GetDistance(UserLocation loc1, UserLocation loc2)
+        {
+            if (loc1?.Latitude == null || loc1?.Longitude == null || loc2?.Latitude == null || loc2?.Longitude == null)
+            {
+                return -1;
+            }
+            
+            var lat1 = loc1.Latitude.Value;
+            var lon1 = loc1.Longitude.Value;
+            var lat2 = loc2.Latitude.Value;
+            var lon2 = loc2.Longitude.Value;
+            
+            var d1 = lat1 * (Math.PI / 180.0);
+            var num1 = lon1 * (Math.PI / 180.0);
+            var d2 = lat2 * (Math.PI / 180.0);
+            var num2 = lon2 * (Math.PI / 180.0) - num1;
+            var d3 = Math.Pow(Math.Sin((d2 - d1) / 2.0), 2.0) + Math.Cos(d1) * Math.Cos(d2) * Math.Pow(Math.Sin(num2 / 2.0), 2.0);
+            return 6376500.0 * (2.0 * Math.Atan2(Math.Sqrt(d3), Math.Sqrt(1.0 - d3)));
+        }
     }
 }

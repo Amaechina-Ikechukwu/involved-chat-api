@@ -40,15 +40,26 @@ namespace Involved_Chat.Services
         return string.Join("_", ordered);
     }
 
-    public async Task UpdateChatPreviewAsync(string chatId, string senderId, string message, DateTime time)
+    public async Task UpdateChatPreviewAsync(string chatId, string senderId, string receiverId, string message, DateTime time)
     {
-        var update = Builders<Chat>.Update
+        var chat = await _context.Chats.Find(c => c.Id == chatId).FirstOrDefaultAsync();
+        if (chat == null) return;
+
+        var updateDefinition = Builders<Chat>.Update
             .Set(c => c.LastMessage, message)
             .Set(c => c.LastMessageTime, time)
             .Set(c => c.LastMessageSenderId, senderId);
 
-        // Update by chat document Id (ObjectId string)
-        await _context.Chats.UpdateOneAsync(c => c.Id == chatId, update);
+        if (chat.UserAId == receiverId)
+        {
+            updateDefinition = updateDefinition.Inc(c => c.UnreadCountA, 1);
+        }
+        else if (chat.UserBId == receiverId)
+        {
+            updateDefinition = updateDefinition.Inc(c => c.UnreadCountB, 1);
+        }
+
+        await _context.Chats.UpdateOneAsync(c => c.Id == chatId, updateDefinition);
     }
 
     public async Task<List<Chat>> GetUserChatsAsync(string userId)
@@ -61,6 +72,17 @@ namespace Involved_Chat.Services
         return await _context.Chats.Find(filter)
             .SortByDescending(c => c.LastMessageTime)
             .ToListAsync();
+    }
+
+    public async Task<int> GetTotalUnreadCountAsync(string userId)
+    {
+        var chats = await GetUserChatsAsync(userId);
+        return chats.Sum(chat => chat.UserAId == userId ? chat.UnreadCountA : chat.UnreadCountB);
+    }
+
+    public async Task<Chat> GetChatByIdAsync(string chatId)
+    {
+        return await _context.Chats.Find(c => c.Id == chatId).FirstOrDefaultAsync();
     }
 }
     

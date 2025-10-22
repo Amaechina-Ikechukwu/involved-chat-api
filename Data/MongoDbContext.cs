@@ -14,8 +14,8 @@ namespace Involved_Chat.Data
         }
 
         public IMongoCollection<User> Users => _database.GetCollection<User>("Users");
-    public IMongoCollection<Message> Messages => _database.GetCollection<Message>("Messages");
-    public IMongoCollection<Chat> Chats => _database.GetCollection<Chat>("Chats");
+        public IMongoCollection<Message> Messages => _database.GetCollection<Message>("Messages");
+        public IMongoCollection<Chat> Chats => _database.GetCollection<Chat>("Chats");
     }
 
     public class MongoDbSettings
