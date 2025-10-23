@@ -1,6 +1,7 @@
 using Involved_Chat.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace Involved_Chat.Controllers
 {
@@ -25,15 +26,21 @@ namespace Involved_Chat.Controllers
             _userService = userService;
         }
 
-        // Get conversation by userA/userB
-        [HttpGet("conversations/{userAId}/{userBId}")]
-        public async Task<IActionResult> GetConversationsAsync(string userAId, string userBId)
+        // Get conversation between current user and another user
+        [HttpGet("conversations/{userBId}")]
+        public async Task<IActionResult> GetConversationsAsync(string userBId)
         {
-            if (string.IsNullOrWhiteSpace(userAId) || string.IsNullOrWhiteSpace(userBId))
-                return BadRequest(new { message = "Both userAId and userBId are required", success = false });
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
 
-            var chat = await _chatService.GetOrCreateChatAsync(userAId, userBId);
-            var messages = await _messageService.GetMessagesAsync(chat.Id);
+            if (string.IsNullOrWhiteSpace(userBId))
+                return BadRequest(new { message = "userBId is required", success = false });
+
+            var chat = await _chatService.GetOrCreateChatAsync(userId, userBId);
+            var messages = await _messageService.GetMessagesAsync(chat.Id, userId);
             return Ok(new { message = "Conversations fetched", data = messages, success = true });
         }
 
@@ -42,20 +49,25 @@ namespace Involved_Chat.Controllers
             public string Content { get; set; } = null!;
         }
 
-        // Send message between two users (userA -> userB)
-        [HttpPost("send/{userAId}/{userBId}")]
-        public async Task<IActionResult> SendMessage(string userAId, string userBId, [FromBody] SendMessageDto dto)
+        // Send message from current user to another user
+        [HttpPost("send/{userBId}")]
+        public async Task<IActionResult> SendMessage(string userBId, [FromBody] SendMessageDto dto)
         {
-            if (string.IsNullOrWhiteSpace(userAId) || string.IsNullOrWhiteSpace(userBId))
-                return BadRequest(new { message = "Both userAId and userBId are required", success = false });
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
+            if (string.IsNullOrWhiteSpace(userBId))
+                return BadRequest(new { message = "userBId is required", success = false });
 
             if (dto == null || string.IsNullOrWhiteSpace(dto.Content))
                 return BadRequest(new { message = "Content is required", success = false });
 
-            // Sender is always userAId (per route)
-            var senderId = userAId;
+            var senderId = userId;
             var receiverId = userBId;
-            var chat = await _chatService.GetOrCreateChatAsync(userAId, userBId);
+            var chat = await _chatService.GetOrCreateChatAsync(senderId, receiverId);
 
             var message = await _messageService.SendMessageAsync(chat.Id, senderId, receiverId, dto.Content);
             await _chatService.UpdateChatPreviewAsync(chat.Id, senderId, receiverId, dto.Content, message.SentAt);

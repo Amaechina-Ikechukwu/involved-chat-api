@@ -22,16 +22,13 @@ namespace Involved_Chat.DTOS
             Id = string.Empty,
             Username = string.Empty,
             Email = string.Empty,
-            CreatedAt = DateTime.MinValue,
             DisplayName = string.Empty,
             PhotoURL = null,
             IsOnline = false,
             LastSeen = null,
             Status = null,
-            Contacts = new List<string>(),
-            ConnectionIds = new List<string>(),
+           
             About = null,
-            BlockedUsers = new List<string>()
         };
         public string? LastMessage { get; set; }
         public DateTime LastMessageTime { get; set; }

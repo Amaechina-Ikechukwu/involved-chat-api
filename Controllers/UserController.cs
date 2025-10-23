@@ -76,10 +76,16 @@ namespace Involved_Chat.Controllers
             return Ok(new { message = "User info retrieved", data = user, success = true });
         }
 
-        [HttpPut("{id}/photo")]
-        public async Task<IActionResult> UpdatePhoto(string id, [FromForm] IFormFile file)
+        [HttpPut("photo")]
+        public async Task<IActionResult> UpdatePhoto([FromForm] IFormFile file)
         {
-               if (file == null || file.Length == 0)
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
+            if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
 
         using var stream = file.OpenReadStream();
@@ -94,7 +100,7 @@ namespace Involved_Chat.Controllers
 
             if (uploadResult.StatusCode == System.Net.HttpStatusCode.OK)
             {
-                await _userService.UpdatePhotoUrlAsync(id, uploadResult.SecureUrl.ToString());
+                await _userService.UpdatePhotoUrlAsync(userId, uploadResult.SecureUrl.ToString());
                 return Ok(new { url = uploadResult.SecureUrl.ToString(), message = "Photo upload successful", success = true });
             }
             else
@@ -104,66 +110,114 @@ namespace Involved_Chat.Controllers
     
         }
 
-        [HttpPut("{id}/about")]
-        public async Task<IActionResult> UpdateAbout(string id, [FromBody] AboutUpdateDto dto)
+        [HttpPut("about")]
+        public async Task<IActionResult> UpdateAbout([FromBody] AboutUpdateDto dto)
         {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
             if (dto == null) return BadRequest();
-            await _userService.UpdateAboutAsync(id, dto.About ?? string.Empty);
+            await _userService.UpdateAboutAsync(userId, dto.About ?? string.Empty);
             return Ok(new{message="About updated",success=true});
         }
 
-        [HttpPut("{id}/displayname")]
-        public async Task<IActionResult> UpdateDisplayName(string id, [FromBody] DisplayNameDto dto)
+        [HttpPut("displayname")]
+        public async Task<IActionResult> UpdateDisplayName([FromBody] DisplayNameDto dto)
         {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
             if (dto == null) return BadRequest();
-            await _userService.UpdateDisplayNameAsync(id, dto.DisplayName ?? string.Empty);
+            await _userService.UpdateDisplayNameAsync(userId, dto.DisplayName ?? string.Empty);
             return Ok(new { message = "Display name updated", success = true });
         }
 
-        [HttpPost("{id}/block")]
-        public async Task<IActionResult> BlockUser(string id, [FromBody] BlockDto dto)
+        [HttpPost("block")]
+        public async Task<IActionResult> BlockUser([FromBody] BlockDto dto)
         {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
             if (dto == null || string.IsNullOrWhiteSpace(dto.TargetUserId)) return BadRequest("targetUserId is required");
-            await _userService.BlockUserAsync(id, dto.TargetUserId);
+            await _userService.BlockUserAsync(userId, dto.TargetUserId);
             return Ok(new{message="This user has been blocked",success=true});
         }
 
-        [HttpPost("{id}/unblock")]
-        public async Task<IActionResult> UnblockUser(string id, [FromBody] BlockDto dto)
+        [HttpPost("unblock")]
+        public async Task<IActionResult> UnblockUser([FromBody] BlockDto dto)
         {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
             if (dto == null || string.IsNullOrWhiteSpace(dto.TargetUserId)) return BadRequest("targetUserId is required");
-            await _userService.UnblockUserAsync(id, dto.TargetUserId);
+            await _userService.UnblockUserAsync(userId, dto.TargetUserId);
             return Ok(new{message="This user has been unblocked",success=true});
         }
 
-        [HttpGet("{id}/contacts")]
-        public async Task<IActionResult> GetContacts(string id)
+        [HttpGet("contacts")]
+        public async Task<IActionResult> GetContacts()
         {
-            var contacts = await _userService.GetContactsAsync(id);
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
+            var contacts = await _userService.GetContactsAsync(userId);
             return Ok(contacts);
         }
 
-        [HttpPost("{id}/push-token")]
-        public async Task<IActionResult> AddPushToken(string id, [FromBody] PushTokenDto dto)
+        [HttpPost("push-token")]
+        public async Task<IActionResult> AddPushToken([FromBody] PushTokenDto dto)
         {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
             if (dto == null || string.IsNullOrWhiteSpace(dto.PushToken)) return BadRequest("pushToken is required");
-            await _userService.AddPushTokenAsync(id, dto.PushToken);
+            await _userService.AddPushTokenAsync(userId, dto.PushToken);
             return Ok(new { message = "Push token added", success = true });
         }
 
-        [HttpDelete("{id}/push-token")]
-        public async Task<IActionResult> RemovePushToken(string id, [FromBody] PushTokenDto dto)
+        [HttpDelete("push-token")]
+        public async Task<IActionResult> RemovePushToken([FromBody] PushTokenDto dto)
         {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
             if (dto == null || string.IsNullOrWhiteSpace(dto.PushToken)) return BadRequest("pushToken is required");
-            await _userService.RemovePushTokenAsync(id, dto.PushToken);
+            await _userService.RemovePushTokenAsync(userId, dto.PushToken);
             return Ok(new { message = "Push token removed", success = true });
         }
 
-        [HttpPut("{id}/location")]
-        public async Task<IActionResult> UpdateLocation(string id, [FromBody] LocationUpdateDto dto)
+        [HttpPut("location")]
+        public async Task<IActionResult> UpdateLocation([FromBody] LocationUpdateDto dto)
         {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                ?? User.FindFirst("sub")?.Value;
+            
+            if (string.IsNullOrEmpty(userId)) 
+                return Unauthorized(new { message = "User ID not found in token", success = false });
+
             if (dto == null) return BadRequest();
-            await _userService.UpdateLocationAsync(id, dto.Latitude, dto.Longitude);
+            await _userService.UpdateLocationAsync(userId, dto.Latitude, dto.Longitude);
             return Ok(new { message = "Location updated", success = true });
         }
 
@@ -205,36 +259,5 @@ namespace Involved_Chat.Controllers
                 message = "Debug info for nearby users feature"
             });
         }
-    }
-
-    public class PhotoUpdateDto
-    {
-        public string PhotoUrl { get; set; } = null!;
-    }
-
-    public class AboutUpdateDto
-    {
-        public string? About { get; set; }
-    }
-
-    public class BlockDto
-    {
-        public string TargetUserId { get; set; } = null!;
-    }
-
-    public class PushTokenDto
-    {
-        public string PushToken { get; set; } = null!;
-    }
-
-    public class DisplayNameDto
-    {
-        public string? DisplayName { get; set; }
-    }
-
-    public class LocationUpdateDto
-    {
-        public double? Latitude { get; set; }
-        public double? Longitude { get; set; }
     }
 }

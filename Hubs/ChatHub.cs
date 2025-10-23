@@ -86,9 +86,11 @@ namespace Involved_Chat.Hubs
             var senderInfo = await _userService.GetUserInfoAsync(senderId);
             var receiverInfo = await _userService.GetUserInfoAsync(receiverId);
 
-            var chatForSender = await _chatService.GetChatByIdAsync(chat.Id);
-            var unreadCountForSender = chatForSender.UserAId == senderId ? chatForSender.UnreadCountA : chatForSender.UnreadCountB;
+            var updatedChat = await _chatService.GetChatByIdAsync(chat.Id);
+            var unreadCountForSender = updatedChat.UserAId == senderId ? updatedChat.UnreadCountA : updatedChat.UnreadCountB;
+            var unreadCountForReceiver = updatedChat.UserAId == receiverId ? updatedChat.UnreadCountA : updatedChat.UnreadCountB;
 
+            // Update chat list for sender
             await Clients.Caller.SendAsync("ChatUpdated", new
             {
                 chatId = chat.Id,
@@ -99,9 +101,7 @@ namespace Involved_Chat.Hubs
                 unreadCount = unreadCountForSender
             });
 
-            var chatForReceiver = await _chatService.GetChatByIdAsync(chat.Id);
-            var unreadCountForReceiver = chatForReceiver.UserAId == receiverId ? chatForReceiver.UnreadCountA : chatForReceiver.UnreadCountB;
-
+            // Update chat list for receiver
             await Clients.User(receiverId).SendAsync("ChatUpdated", new
             {
                 chatId = chat.Id,
@@ -143,9 +143,9 @@ namespace Involved_Chat.Hubs
 
             try
             {
-                var messages = await _messageService.GetMessagesAsync(chatId, limit);
-                Console.WriteLine($"[SignalR] Sending {messages.Count} messages for chat {chatId}");
-                await Clients.Caller.SendAsync("ReceiveChatMessages", messages);
+                var response = await _messageService.GetMessagesAsync(chatId, userId, limit);
+                Console.WriteLine($"[SignalR] Sending {response.Messages.Count} messages for chat {chatId}");
+                await Clients.Caller.SendAsync("ReceiveChatMessages", response);
             }
             catch (Exception ex)
             {
@@ -166,26 +166,7 @@ namespace Involved_Chat.Hubs
 
             try
             {
-                var chats = await _chatService.GetUserChatsAsync(userId);
-                var enriched = new List<object>();
-
-                foreach (var chat in chats)
-                {
-                    var otherUserId = chat.UserAId == userId ? chat.UserBId : chat.UserAId;
-                    var otherUser = await _userService.GetUserInfoAsync(otherUserId);
-                    var unreadCount = chat.UserAId == userId ? chat.UnreadCountA : chat.UnreadCountB;
-
-                    enriched.Add(new
-                    {
-                        chatId = chat.Id,
-                        otherUser,
-                        chat.LastMessage,
-                        chat.LastMessageTime,
-                        chat.LastMessageSenderId,
-                        unreadCount
-                    });
-                }
-
+                var enriched = await _chatService.GetUserChatsWithDetailsAsync(userId);
                 await Clients.Caller.SendAsync("ReceiveChats", enriched);
             }
             catch (Exception ex)
