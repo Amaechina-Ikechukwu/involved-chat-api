@@ -100,7 +100,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowLocalFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins("http://localhost:5173,https://regal-biscotti-bd85f7.netlify.app")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
