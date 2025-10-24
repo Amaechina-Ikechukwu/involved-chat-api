@@ -95,6 +95,18 @@ builder.Services.AddSignalR();
 // Configure SignalR to use the user ID from JWT claims
 builder.Services.AddSingleton<IUserIdProvider, Involved_Chat.Services.CustomUserIdProvider>();
 
+// Add CORS policy to allow local frontend (Vite dev server)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowLocalFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
 // Authorization should be added before building the app so middleware is available
 builder.Services.AddAuthorization();
 string mongoConn;
@@ -257,6 +269,8 @@ app.MapHealthChecksUI(options =>
 });
 
 app.UseHttpsRedirection();
+// Enable CORS for the local frontend (must be before auth and endpoints)
+app.UseCors("AllowLocalFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
